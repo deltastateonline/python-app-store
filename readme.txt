@@ -13,4 +13,6 @@ flast db upgrade
 
 
 git remote add origin https://github.com/deltastateonline/python-app-store.git
+git branch -M master
+git push -u origin master
 
