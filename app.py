@@ -1,56 +1,92 @@
-from flask import Flask, request
+import os
+from flask import Flask,jsonify
+from flask_smorest import Api
 
-app = Flask(__name__)
-app.debug = True
+from db import  db
+from blocklist import BLOCKLIST
+from resources.item import blp as ItemBlueprint
+from resources.store import blp as StoreBlueprint
+from resources.tag import blp as TagBlueprint
+from resources.user import blp as UserBlueprint
+from flask_jwt_extended import JWTManager
+from flask_migrate import Migrate
 
-stores = [
-    {
-        "name": "Store 1",
-        "items": [
-            {
-                "name":"chair",
-                "price": 15
-            }
-        ]
-    }
-]
+def create_app(db_url=None):
+    app = Flask(__name__)
 
+    app.config['PROPAGATE_EXCEPTIONS'] = True
+    app.config['API_TITLE'] = "Stores Rest Api."
+    app.config['API_VERSION'] = "v1"
+    app.config['OPENAPI_URL_PREFIX'] = "/"
+    app.config['OPENAPI_VERSION'] = "3.0.3"
+    app.config['OPENAPI_SWAGGER_UI_PATH'] = "/swagger-ui"
+    app.config['OPENAPI_SWAGGER_UI_URL'] = "https://cdn.jsdelivr.net/npm/swagger-ui-dist/"
+    app.config['SQLALCHEMY_DATABASE_URI'] = db_url or os.getenv("DATABASE_URL","sqlite:///data-org.db")
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    db.init_app(app)
 
-@app.get('/store')
-def get_stores():
-    return {'stores': stores}
+    migrate = Migrate(app, db)
 
+    api = Api(app)
+    app.config["JWT_SECRET_KEY"] = "SomeSecretKey"
 
-@app.post('/store')
-def create_store():
-    req_d = request.get_json()
-    if  'name' in req_d:
-        new_store = {"name": req_d["name"], "items": []}
-        stores.append(new_store)
-        return new_store, 201
-    return {"message": "bad request"}, 400
+    jwt = JWTManager(app)
 
+    @jwt.token_in_blocklist_loader
+    def check_if_token_in_blocklist(jwt_header, jwt_payload):
+        return jwt_payload["jti"] in BLOCKLIST
 
-@app.post('/store/<string:name>/item')
-def create_item(name):
-    req_d = request.get_json()
-    for a_store in stores:
-        if a_store["name"] == name:
-            new_item = {
-                "name": req_d["name"],
-                "price": req_d["price"]
-            }
-            a_store["items"].append(new_item)
-            return new_item, 201
+    #message to return
+    @jwt.revoked_token_loader
+    def revoke_token_callback(jwt_header, jwt_payload):
+        return (
+            jsonify({"description": "Token has been revoked", "error":"token_revoked"})
+            , 401
+        )
 
-    return {"message": "Store Not Found."}, 400
+    @jwt.additional_claims_loader
+    def add_claim_to_jwt(identity):
 
+        if identity["user_id"] == 1:
+            return {"is_admin": True}
+        else:
+            return {"is_admin": False}
 
-@app.get('/store/<string:name>')
-def get_store(name):
-    req_d = request.get_json()
-    for a_store in stores:
-        if a_store["name"] == name:
-            return {"items": a_store['items']}, 200
+    @jwt.expired_token_loader
+    def expired_token_callback(jwt_header, jwt_payload):
+        return (
+            jsonify({"message":"The token has expired.","error":"token_expired"}),
+            401
+        )
+    @jwt.invalid_token_loader #takes an error for the function
+    def invalid_token_callback(error):
+        return (
+            jsonify({"description": "Invalid access token.",
+                     "error": "authorization_required"}), 401
+        )
 
-    return {"message": "Store Not Found."}, 400
+    @jwt.unauthorized_loader
+    def missing_token_callback(error):
+        return (
+            jsonify({"description":"Request does not contain an access token.",
+                     "error": "authorization_required"}), 401
+        )
+
+    @jwt.needs_fresh_token_loader
+    def token_not_fresh_callback(jwt_h, jwt_p):
+        return(
+            jsonify({
+                "description": "The token is not fresh",
+                "error": "fresh_token_required"
+            }), 401
+        )
+
+    # remove this after enabling migrate
+    # with app.app_context():
+        # db.create_all()
+
+    api.register_blueprint(ItemBlueprint)
+    api.register_blueprint(StoreBlueprint)
+    api.register_blueprint(TagBlueprint)
+    api.register_blueprint(UserBlueprint)
+    return app
