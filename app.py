@@ -1,11 +1,9 @@
 import os
-import secrets
-import uuid
 from flask import Flask,jsonify
 from flask_smorest import Api
 
 from db import  db
-import models
+from blocklist import BLOCKLIST
 from resources.item import blp as ItemBlueprint
 from resources.store import blp as StoreBlueprint
 from resources.tag import blp as TagBlueprint
@@ -31,6 +29,26 @@ def create_app(db_url=None):
 
     jwt = JWTManager(app)
 
+    @jwt.token_in_blocklist_loader
+    def check_if_token_in_blocklist(jwt_header, jwt_payload):
+        return jwt_payload["jti"] in BLOCKLIST
+
+    #message to return
+    @jwt.revoked_token_loader
+    def revoke_token_callback(jwt_header, jwt_payload):
+        return (
+            jsonify({"description": "Token has been revoked", "error":"token_revoked"})
+            , 401
+        )
+
+    @jwt.additional_claims_loader
+    def add_claim_to_jwt(identity):
+
+        if identity["user_id"] == 1:
+            return {"is_admin": True}
+        else:
+            return {"is_admin": False}
+
     @jwt.expired_token_loader
     def expired_token_callback(jwt_header, jwt_payload):
         return (
@@ -43,11 +61,21 @@ def create_app(db_url=None):
             jsonify({"description": "Invalid access token.",
                      "error": "authorization_required"}), 401
         )
+
     @jwt.unauthorized_loader
     def missing_token_callback(error):
         return (
             jsonify({"description":"Request does not contain an access token.",
                      "error": "authorization_required"}), 401
+        )
+
+    @jwt.needs_fresh_token_loader
+    def token_not_fresh_callback(jwt_h, jwt_p):
+        return(
+            jsonify({
+                "description": "The token is not fresh",
+                "error": "fresh_token_required"
+            }), 401
         )
 
     with app.app_context():
