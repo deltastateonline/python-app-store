@@ -3,11 +3,13 @@ from flask import Flask, request
 from flask.views import MethodView
 from flask_smorest import Blueprint, abort
 from db import stores
+from schemas import Storeschema
 
 blp = Blueprint("stores",__name__, description="Operation on stores")
 
 @blp.route("/store/<string:store_id>")
 class Store(MethodView):
+    @blp.response(200, Storeschema)
     def get(self, store_id):
         try:
             return stores[store_id]
@@ -23,12 +25,13 @@ class Store(MethodView):
 
 
 @blp.route("/store")
-class StroreList(MethodView):
+class StoreList(MethodView):
+    @blp.response(200, Storeschema(many=True))
     def get(self):
         return {"stores": list(stores.values())}
 
-    def post(self):
-        req_d = request.get_json()
+    @blp.arguments(Storeschema)
+    def post(self, req_d):
         if 'name' in req_d:
             store_id = uuid.uuid4().hex
             new_store = {**req_d, 'id': store_id}
