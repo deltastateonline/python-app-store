@@ -1,7 +1,6 @@
-import uuid
-from flask import Flask, request
 from flask.views import MethodView
 from flask_smorest import Blueprint, abort
+from flask_jwt_extended import jwt_required
 from sqlalchemy.exc import SQLAlchemyError
 from db import db
 
@@ -12,7 +11,7 @@ from schemas import ItemUpdateSchema, ItemSchema
 blp = Blueprint("Items",__name__, description="Operation on items")
 
 
-@blp.route("/item/<string:item_id>")
+@blp.route("/item/<int:item_id>")
 class Item(MethodView):
     @blp.response(200, ItemSchema)
     def get(self, item_id):
@@ -49,6 +48,8 @@ class ItemList(MethodView):
     def get(self):
         return ItemModel.query.all()
 
+
+    @jwt_required()
     @blp.arguments(ItemSchema)
     @blp.response(201, ItemSchema)
     def post(self, item_data):
