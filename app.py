@@ -9,6 +9,7 @@ from resources.store import blp as StoreBlueprint
 from resources.tag import blp as TagBlueprint
 from resources.user import blp as UserBlueprint
 from flask_jwt_extended import JWTManager
+from flask_migrate import Migrate
 
 def create_app(db_url=None):
     app = Flask(__name__)
@@ -20,9 +21,11 @@ def create_app(db_url=None):
     app.config['OPENAPI_VERSION'] = "3.0.3"
     app.config['OPENAPI_SWAGGER_UI_PATH'] = "/swagger-ui"
     app.config['OPENAPI_SWAGGER_UI_URL'] = "https://cdn.jsdelivr.net/npm/swagger-ui-dist/"
-    app.config['SQLALCHEMY_DATABASE_URI'] = db_url or os.getenv("DATABASE_URL","sqlite:///data.db")
+    app.config['SQLALCHEMY_DATABASE_URI'] = db_url or os.getenv("DATABASE_URL","sqlite:///data-org.db")
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     db.init_app(app)
+
+    migrate = Migrate(app, db)
 
     api = Api(app)
     app.config["JWT_SECRET_KEY"] = "SomeSecretKey"
@@ -78,8 +81,9 @@ def create_app(db_url=None):
             }), 401
         )
 
-    with app.app_context():
-        db.create_all()
+    # remove this after enabling migrate
+    # with app.app_context():
+        # db.create_all()
 
     api.register_blueprint(ItemBlueprint)
     api.register_blueprint(StoreBlueprint)
