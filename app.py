@@ -11,9 +11,11 @@ from resources.user import blp as UserBlueprint
 from resources.health import blp as HealthBlueprint
 from flask_jwt_extended import JWTManager
 from flask_migrate import Migrate
+from dotenv import load_dotenv
 
 def create_app(db_url=None):
     app = Flask(__name__)
+    load_dotenv()
 
     app.config['PROPAGATE_EXCEPTIONS'] = True
     app.config['API_TITLE'] = "Stores Rest Api."
